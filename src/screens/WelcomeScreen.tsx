@@ -62,6 +62,8 @@ export default function WelcomeScreen({ onBegin }: Props) {
             letterSpacing: "0.22em",
             fontSize: 12,
             textTransform: "uppercase",
+            alignSelf: "flex-start",
+            textAlign: "left",
           }}
         >
           WELCOME TO

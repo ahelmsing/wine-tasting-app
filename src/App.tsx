@@ -1,63 +1,94 @@
 // src/App.tsx
-import React, { useCallback, useMemo, useState } from "react";
+import { useState } from "react";
+import "./App.css";
 
-import { AppContainer } from "./components/layout/AppContainer";
-import { initialSession, type Session } from "./app/state/session";
+// Data
+import { FLIGHTS } from "./data/flights";
 
-// Screens
-import WelcomeScreen from "./screens/WelcomeScreen";
-import { FlightSelectScreen } from "./screens/FlightSelectScreen";
-import { ExperienceLevelScreen } from "./screens/ExperienceLevelScreen";
-import { WineScreen } from "./screens/WineScreen";
-import { RecapScreen } from "./screens/RecapScreen";
+// Types (type-only import keeps TS happy if verbatimModuleSyntax is on)
+import type { Session, ExperienceLevel } from "./app/state/session";
+
+// Flexible imports: works whether the file exports default OR named
+import * as WelcomeMod from "./screens/WelcomeScreen";
+import * as FlightMod from "./screens/FlightSelectScreen";
+import * as ExperienceMod from "./screens/ExperienceLevelScreen";
+import * as WineMod from "./screens/WineScreen";
+import * as RecapMod from "./screens/RecapScreen";
+
+import * as AppContainerMod from "./components/layout/AppContainer";
+
+// Pick default if it exists, otherwise use named export
+const WelcomeScreen =
+  (WelcomeMod as any).default ?? (WelcomeMod as any).WelcomeScreen;
+
+const FlightSelectScreen =
+  (FlightMod as any).default ?? (FlightMod as any).FlightSelectScreen;
+
+const ExperienceLevelScreen =
+  (ExperienceMod as any).default ?? (ExperienceMod as any).ExperienceLevelScreen;
+
+const WineScreen = (WineMod as any).default ?? (WineMod as any).WineScreen;
+
+const RecapScreen = (RecapMod as any).default ?? (RecapMod as any).RecapScreen;
+
+const AppContainer =
+  (AppContainerMod as any).default ?? (AppContainerMod as any).AppContainer;
 
 type ScreenKey = "welcome" | "flight" | "experience" | "wine" | "recap";
 
 export default function App() {
   const [screenKey, setScreenKey] = useState<ScreenKey>("welcome");
 
-  // Keep a single session source of truth at the top
-  const [session, setSession] = useState<Session>(() => initialSession);
+  const [session, setSession] = useState<Session>({
+    flightId: null,
+    experienceLevel: null,
+    responsesByWineId: {},
+  });
 
   // Navigation helpers
-  const goToWelcome = useCallback(() => setScreenKey("welcome"), []);
-  const goToFlight = useCallback(() => setScreenKey("flight"), []);
-  const goToExperience = useCallback(() => setScreenKey("experience"), []);
-  const goToWine = useCallback(() => setScreenKey("wine"), []);
-  const goToRecap = useCallback(() => setScreenKey("recap"), []);
+  const goToWelcome = () => setScreenKey("welcome");
+  const goToFlight = () => setScreenKey("flight");
+  const goToExperience = () => setScreenKey("experience");
+  const goToWine = () => setScreenKey("wine");
+  const goToRecap = () => setScreenKey("recap");
 
-  const restart = useCallback(() => {
-    setSession(initialSession);
-    setScreenKey("welcome");
-  }, []);
+  const onBegin = () => goToFlight();
 
-  const containerWidth = useMemo(() => 980, []);
+  const onSelectFlight = (flightId: string) => {
+    setSession((prev) => ({ ...prev, flightId }));
+    goToExperience();
+  };
 
-  // --- IMPORTANT ---
-  // Your screen components currently have Props types that do NOT include `session`,
-  // but we still want to pass session around for app flow.
-  // Cast them to `any` here to stop TS from blocking compilation while we’re iterating UI.
-  const Welcome: any = WelcomeScreen;
-  const FlightSelect: any = FlightSelectScreen;
-  const ExperienceLevel: any = ExperienceLevelScreen;
-  const Wine: any = WineScreen;
-  const Recap: any = RecapScreen;
+  const onSelectExperience = (experienceLevel: ExperienceLevel) => {
+    setSession((prev) => ({ ...prev, experienceLevel }));
+    goToWine();
+  };
 
-  let screen: React.ReactNode = null;
+  const onUpdateSession = (nextSession: Session) => {
+    setSession(nextSession);
+  };
+
+  const onRestart = () => {
+    setSession({
+      flightId: null,
+      experienceLevel: null,
+      responsesByWineId: {},
+    });
+    goToWelcome();
+  };
+
+  let screen: any = null;
 
   switch (screenKey) {
     case "welcome":
-      screen = <Welcome onBegin={goToFlight} />;
+      screen = <WelcomeScreen onBegin={onBegin} />;
       break;
 
     case "flight":
       screen = (
-        <FlightSelect
-          session={session}
-          onSelectFlight={(flightId: string) => {
-            setSession((prev) => ({ ...prev, flightId } as Session));
-            goToExperience();
-          }}
+        <FlightSelectScreen
+          flights={FLIGHTS}
+          onSelectFlight={onSelectFlight}
           onBack={goToWelcome}
         />
       );
@@ -65,22 +96,20 @@ export default function App() {
 
     case "experience":
       screen = (
-        <ExperienceLevel
-          session={session}
-          onSelectExperience={(experienceLevel: any) => {
-            setSession((prev) => ({ ...prev, experienceLevel } as Session));
-            goToWine();
-          }}
+        <ExperienceLevelScreen
+          onSelectExperience={onSelectExperience}
           onBack={goToFlight}
         />
       );
       break;
 
     case "wine":
+      // WineScreen varies wildly between builds, so we pass the superset.
+      // If it doesn’t use some props, it ignores them.
       screen = (
-        <Wine
+        <WineScreen
           session={session}
-          onUpdateSession={(nextSession: Session) => setSession(nextSession)}
+          onUpdateSession={onUpdateSession}
           onDone={goToRecap}
           onBack={goToExperience}
         />
@@ -89,7 +118,7 @@ export default function App() {
 
     case "recap":
       screen = (
-        <Recap session={session} onRestart={restart} onBack={goToWine} />
+        <RecapScreen session={session} onRestart={onRestart} onBack={goToWine} />
       );
       break;
 
@@ -98,5 +127,6 @@ export default function App() {
       break;
   }
 
-  return <AppContainer maxWidth={containerWidth}>{screen}</AppContainer>;
+  // AppContainer also varies (default vs named), so we call it safely.
+  return <AppContainer>{screen}</AppContainer>;
 }
