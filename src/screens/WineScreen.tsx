@@ -1,6 +1,7 @@
 // src/screens/WineScreen.tsx
 
 import type { TagId, WineResponse } from "../app/state/session";
+import { BRAND } from "../styles/brand";
 
 type Wine = {
   id: string;
@@ -31,7 +32,7 @@ const TAGS: Array<{ id: TagId; label: string }> = [
   { id: "BOLD", label: "Bold" },
 ];
 
-export function WineScreen({
+export default function WineScreen({
   wine,
   progressLabel,
   response,
@@ -47,45 +48,151 @@ export function WineScreen({
   const tagLimitReached = selectedTags.length >= 3;
 
   return (
-    <div>
-      {/* Header row */}
+    <div
+      style={{
+        width: "100%",
+        maxWidth: 760,
+        margin: "0 auto",
+        padding: "clamp(18px, 3.2vw, 32px)",
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Header */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: 24,
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 18,
         }}
       >
-        <button onClick={onBack}>← Back</button>
-        <div style={{ color: "#6B7280", fontSize: 14 }}>{progressLabel}</div>
+        <button
+          onClick={onBack}
+          style={{
+            border: `1px solid ${BRAND.colors.borderSoft}`,
+            background: BRAND.colors.surface,
+            borderRadius: BRAND.radii.pill,
+            padding: "8px 12px",
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          ← Back
+        </button>
+
+        <div
+          style={{
+            letterSpacing: "0.22em",
+            textTransform: "uppercase",
+            fontSize: 12,
+            color: BRAND.colors.textSecondary,
+          }}
+        >
+          {progressLabel}
+        </div>
       </div>
 
-      {/* Wine Info */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ margin: "0 0 6px 0" }}>{wine.name}</h1>
-
-        <div style={{ color: "#6B7280", fontSize: 14, marginBottom: 10 }}>
-          {wine.varietal}
+      {/* Title */}
+      <div style={{ marginBottom: 18 }}>
+        <div
+          style={{
+            fontFamily: BRAND.typography.displayFamily,
+            fontSize: "clamp(34px, 4.8vw, 56px)",
+            lineHeight: 1.05,
+            margin: 0,
+            color: BRAND.colors.textPrimary,
+            fontWeight: 700,
+          }}
+        >
+          {wine.name}
         </div>
 
-        <div style={{ fontSize: 16, lineHeight: 1.5 }}>{wine.microStory}</div>
+        <div
+          style={{
+            marginTop: 10,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            color: BRAND.colors.textSecondary,
+            fontSize: 14,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 10px",
+              borderRadius: BRAND.radii.pill,
+              border: `1px solid ${BRAND.colors.borderSoft}`,
+              background: "rgba(255,255,255,0.65)",
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              fontSize: 11,
+              color: BRAND.colors.textPrimary,
+            }}
+          >
+            {wine.varietal}
+          </span>
+          <span style={{ fontSize: 13 }}>
+            Quick impression first, details later.
+          </span>
+        </div>
+
+        <div
+          style={{
+            marginTop: 14,
+            fontSize: 15,
+            lineHeight: 1.6,
+            color: BRAND.colors.textPrimary,
+            maxWidth: 62 * 12, // readable line length-ish
+          }}
+        >
+          {wine.microStory}
+        </div>
       </div>
 
-      {/* Tags */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>
-          What stands out most?
-        </div>
+      {/* Tags Card */}
+      <div
+        style={{
+          background: BRAND.colors.surface,
+          borderRadius: BRAND.radii.card,
+          border: `1px solid ${BRAND.colors.borderSoft}`,
+          boxShadow: "0 14px 40px rgba(0,0,0,0.10)",
+          padding: 18,
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            marginBottom: 10,
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 800, color: BRAND.colors.textPrimary }}>
+            What stands out?
+          </div>
 
-        <div style={{ color: "#6B7280", fontSize: 12, marginBottom: 12 }}>
-          Select up to 3.
+          <div
+            style={{
+              fontSize: 12,
+              color: BRAND.colors.textSecondary,
+            }}
+          >
+            Pick up to <b>3</b>
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))",
             gap: 10,
           }}
         >
@@ -100,61 +207,130 @@ export function WineScreen({
                 disabled={isDisabled}
                 style={{
                   padding: "10px 12px",
-                  borderRadius: 999,
-
-                  // Stronger "pill" presence when unselected
-                  border: isSelected ? "1px solid #1C1C1E" : "1px solid #D1D5DB",
-                  background: isSelected ? "#1C1C1E" : "#F9FAFB",
-                  color: isSelected ? "#FFFFFF" : "#1C1C1E",
-
-                  opacity: isDisabled ? 0.45 : 1,
+                  borderRadius: BRAND.radii.pill,
+                  border: isSelected
+                    ? `1px solid ${BRAND.colors.accent}`
+                    : `1px solid ${BRAND.colors.borderSoft}`,
+                  background: isSelected ? BRAND.colors.accentSoft : "rgba(0,0,0,0.02)",
+                  color: BRAND.colors.textPrimary,
                   fontSize: 14,
+                  fontWeight: 700,
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  opacity: isDisabled ? 0.45 : 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
                 }}
               >
-                {t.label}
+                <span>{t.label}</span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 999,
+                    border: isSelected
+                      ? `2px solid ${BRAND.colors.accent}`
+                      : `2px solid rgba(0,0,0,0.22)`,
+                    background: isSelected ? BRAND.colors.accent : "transparent",
+                    flex: "0 0 auto",
+                  }}
+                />
               </button>
             );
           })}
         </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            fontSize: 12,
+            color: BRAND.colors.textSecondary,
+          }}
+        >
+          Tip: go with your gut. “Fruity + Crisp + Smooth” is totally valid.
+        </div>
       </div>
 
-      {/* Rating */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>
-          How much are you enjoying this?
+      {/* Rating Card */}
+      <div
+        style={{
+          background: BRAND.colors.surface,
+          borderRadius: BRAND.radii.card,
+          border: `1px solid ${BRAND.colors.borderSoft}`,
+          boxShadow: "0 14px 40px rgba(0,0,0,0.10)",
+          padding: 18,
+          marginBottom: 18,
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 800, color: BRAND.colors.textPrimary }}>
+          How much are you enjoying it?
         </div>
 
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            color: "#6B7280",
-            fontSize: 14,
-            marginBottom: 10,
+            color: BRAND.colors.textSecondary,
+            fontSize: 12,
+            marginTop: 10,
+            marginBottom: 12,
           }}
         >
           <span>Not enjoying</span>
           <span>Loving it</span>
         </div>
 
-        <div style={{ display: "flex", gap: 14 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 12,
+            alignItems: "center",
+            width: "100%",
+            justifyItems: "center",
+          }}
+        >
           {[1, 2, 3, 4, 5].map((n) => {
             const selected = rating === n;
+
             return (
               <button
                 key={n}
                 onClick={() => onSetRating(n as 1 | 2 | 3 | 4 | 5)}
+                aria-label={`Rate ${n} out of 5`}
                 style={{
-                  width: 18,
-                  height: 18,
+                  width: 44,
+                  height: 44,
                   borderRadius: 999,
-                  border: "2px solid #1C1C1E",
-                  background: selected ? "#1C1C1E" : "transparent",
+                  border: selected
+                    ? `2px solid ${BRAND.colors.accent}`
+                    : `2px solid rgba(0,0,0,0.20)`,
+                  background: selected ? BRAND.colors.accentSoft : "transparent",
+                  cursor: "pointer",
+                  display: "grid",
+                  placeItems: "center",
                 }}
-              />
+              >
+                <div
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: selected ? BRAND.colors.accent : "rgba(0,0,0,0.25)",
+                  }}
+                />
+              </button>
             );
           })}
         </div>
+
+        {!hasRating && (
+          <div style={{ color: BRAND.colors.textSecondary, fontSize: 12, marginTop: 12 }}>
+            Choose a rating to continue.
+          </div>
+        )}
       </div>
 
       {/* Next */}
@@ -164,20 +340,29 @@ export function WineScreen({
         style={{
           width: "100%",
           padding: "14px 16px",
-          borderRadius: 16,
-          background: "#1C1C1E",
+          borderRadius: BRAND.radii.pill,
+          border: "none",
+          background: BRAND.colors.accent,
           color: "#FFFFFF",
+          fontWeight: 800,
+          cursor: hasRating ? "pointer" : "not-allowed",
           opacity: hasRating ? 1 : 0.45,
+          boxShadow: "0 18px 60px rgba(0,0,0,0.18)",
         }}
       >
-        Next
+        Next →
       </button>
 
-      {!hasRating && (
-        <div style={{ color: "#6B7280", fontSize: 12, marginTop: 10 }}>
-          Choose a rating to continue.
-        </div>
-      )}
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 12,
+          color: BRAND.colors.textSecondary,
+          textAlign: "center",
+        }}
+      >
+        You can always tweak tags later in the recap.
+      </div>
     </div>
   );
 }
