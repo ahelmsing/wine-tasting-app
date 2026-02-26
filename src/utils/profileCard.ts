@@ -100,6 +100,90 @@ function tagToSuggestion(tag: TagId): string {
   }
 }
 
+function drawShadowCard(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  fill: string,
+  shadow: { color: string; blur: number; y: number }
+) {
+  ctx.save();
+  ctx.shadowColor = shadow.color;
+  ctx.shadowBlur = shadow.blur;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = shadow.y;
+  ctx.fillStyle = fill;
+  roundedRect(ctx, x, y, w, h, r);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChip(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  opts: {
+    padX: number;
+    padY: number;
+    r: number;
+    bg: string;
+    border: string;
+    color: string;
+    font: string;
+  }
+) {
+  ctx.save();
+  ctx.font = opts.font;
+  const textW = ctx.measureText(text).width;
+  const w = Math.ceil(textW + opts.padX * 2);
+  const h = Math.ceil(34 + opts.padY * 2); // tuned for 28–30px font sizes
+
+  ctx.fillStyle = opts.bg;
+  ctx.strokeStyle = opts.border;
+  ctx.lineWidth = 2;
+
+  roundedRect(ctx, x, y, w, h, opts.r);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = opts.color;
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + opts.padX, y + h / 2 + 1);
+
+  ctx.restore();
+  return { w, h };
+}
+
+function drawRatingDots(
+  ctx: CanvasRenderingContext2D,
+  rating: number | null,
+  x: number,
+  y: number,
+  opts: { dot: number; gap: number; stroke: string; fill: string; empty: string }
+) {
+  ctx.save();
+  for (let i = 1; i <= 5; i++) {
+    const cx = x + (i - 1) * (opts.dot * 2 + opts.gap) + opts.dot;
+    const cy = y + opts.dot;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, opts.dot, 0, Math.PI * 2);
+    ctx.closePath();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = opts.stroke;
+    ctx.stroke();
+
+    ctx.fillStyle = rating !== null && i <= rating ? opts.fill : opts.empty;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function downloadProfileCardPng(args: {
   wineryName?: string;
   title?: string;
@@ -115,7 +199,7 @@ export function downloadProfileCardPng(args: {
     wines,
   } = args;
 
-  // Card size (portrait, phone-friendly)
+  // Portrait, phone-friendly
   const W = 1080;
   const H = 1920;
 
@@ -126,83 +210,208 @@ export function downloadProfileCardPng(args: {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  // Background
-  ctx.fillStyle = "#FFFFFF";
+  // --- Palette (matches your app vibe) ---
+  const PLUM_1 = "#2A0F1D";
+  const PLUM_2 = "#150813";
+  const CREAM = "#F5F2EC";
+  const INK = "#141820";
+  const MUTED = "rgba(20,24,32,0.70)";
+  const BORDER_SOFT = "rgba(0,0,0,0.10)";
+  const ACCENT = "#7B1E3A";
+  const ACCENT_SOFT = "rgba(123,30,58,0.12)";
+
+  // --- Background: dramatic plum gradient + subtle vignette ---
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, PLUM_1);
+  bg.addColorStop(1, PLUM_2);
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
+  // vignette
+  ctx.save();
+  const vignette = ctx.createRadialGradient(W * 0.5, H * 0.35, 80, W * 0.5, H * 0.5, H * 0.9);
+  vignette.addColorStop(0, "rgba(0,0,0,0)");
+  vignette.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // --- Outer “paper” card ---
+  const outerPad = 64;
+  const cardX = outerPad;
+  const cardY = 84;
+  const cardW = W - outerPad * 2;
+  const cardH = H - cardY - 120;
+
+  drawShadowCard(ctx, cardX, cardY, cardW, cardH, 64, CREAM, {
+    color: "rgba(0,0,0,0.35)",
+    blur: 60,
+    y: 22,
+  });
+
+  // inner padding for content
   const pad = 72;
+  const x0 = cardX + pad;
+  let y = cardY + 76;
+  const maxW = cardW - pad * 2;
 
-  // Winery name
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 64px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText(wineryName, pad, 140);
-
-  // Title
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 72px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  wrapText(ctx, title, pad, 240, W - pad * 2, 84);
-
-  // Personality box
-  const boxX = pad;
-  const boxY = 360;
-  const boxW = W - pad * 2;
-  const boxH = 200;
-
-  ctx.fillStyle = "#F3F4F6";
-  roundedRect(ctx, boxX, boxY, boxW, boxH, 36);
+  // Accent bar
+  ctx.fillStyle = ACCENT;
+  roundedRect(ctx, x0, y - 28, maxW, 10, 999);
   ctx.fill();
 
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 44px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText("You gravitate toward:", boxX + 40, boxY + 78);
+  // Fonts: we use reliable stacks (canvas can’t guarantee your exact serif)
+  const serifStack =
+    '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
+  const sansStack =
+    'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial';
 
-  ctx.fillStyle = "#111827";
-  ctx.font = "600 52px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText(personality, boxX + 40, boxY + 150);
+  // Winery name (small, modern)
+  ctx.fillStyle = INK;
+  ctx.font = `700 36px ${sansStack}`;
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(wineryName, x0, y + 26);
 
-  // Top tags line
-  ctx.fillStyle = "#6B7280";
-  ctx.font = "500 34px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText(`Top tags: ${topTags.join(", ")}`, pad, 620);
+  // Title (dramatic)
+  y += 92;
+  ctx.fillStyle = INK;
+  ctx.font = `700 72px ${serifStack}`;
+  y = wrapText(ctx, title, x0, y, maxW, 78) + 22;
 
-  // Wines header
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 44px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText("Your Wines", pad, 700);
+  // Divider
+  ctx.fillStyle = "rgba(0,0,0,0.12)";
+  ctx.fillRect(x0, y, maxW, 2);
+  y += 26;
 
-  // Wine list
-  let y = 760;
-  const rowGap = 18;
+  // Subtitle
+  ctx.fillStyle = MUTED;
+  ctx.font = `500 30px ${sansStack}`;
+  y = wrapText(
+    ctx,
+    "A quick snapshot of what you enjoyed today, plus a direction for next time.",
+    x0,
+    y + 8,
+    maxW,
+    40
+  ) + 40;
 
-  for (const w of wines.slice(0, 8)) {
-    const rowH = 150;
+  // --- Personality card ---
+  const pH = 190;
+  drawShadowCard(ctx, x0, y, maxW, pH, 36, "rgba(255,255,255,0.72)", {
+    color: "rgba(0,0,0,0.14)",
+    blur: 28,
+    y: 10,
+  });
 
-    ctx.fillStyle = "#FFFFFF";
-    ctx.strokeStyle = "#E5E7EB";
-    ctx.lineWidth = 3;
-    roundedRect(ctx, pad, y, W - pad * 2, rowH, 28);
-    ctx.fill();
-    ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.font = `800 26px ${sansStack}`;
+  ctx.fillText("You gravitate toward", x0 + 32, y + 56);
 
-    ctx.fillStyle = "#111827";
-    ctx.font = "700 40px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-    wrapText(ctx, w.name, pad + 32, y + 54, W - pad * 2 - 64, 46);
+  ctx.fillStyle = INK;
+  ctx.font = `900 46px ${sansStack}`;
+  wrapText(ctx, personality, x0 + 32, y + 112, maxW - 64, 54);
 
-    ctx.fillStyle = "#6B7280";
-    ctx.font = "500 30px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-    const ratingText = w.rating ? `${w.rating}/5` : "-/5";
-    ctx.fillText(`${w.varietal} • Rating: ${ratingText}`, pad + 32, y + 98);
+  // Top tag chips
+  const chipsY = y + 132;
+  let cx = x0 + 32;
+  const chipFont = `800 26px ${sansStack}`;
+  const chipMaxW = x0 + maxW - 32;
 
-    const tagText = w.tags.length > 0 ? w.tags.map((t) => TAG_LABELS[t]).join(", ") : "none";
-    ctx.fillText(`Tags: ${tagText}`, pad + 32, y + 132);
-
-    y += rowH + rowGap;
-
-    if (y > 1380) break;
+  const chipLabels = topTags.slice(0, 3).filter(Boolean);
+  for (const label of chipLabels) {
+    const chip = drawChip(ctx, label, cx, chipsY, {
+      padX: 16,
+      padY: 3,
+      r: 999,
+      bg: ACCENT_SOFT,
+      border: "rgba(123,30,58,0.25)",
+      color: ACCENT,
+      font: chipFont,
+    });
+    cx += chip.w + 12;
+    if (cx > chipMaxW) break;
   }
 
-  // Next time section (based on topTags text -> best-effort mapping)
-  // We don’t have TagId here for topTags, so we infer by label.
+  y += pH + 28;
+
+  // --- Section header: Wines ---
+  ctx.fillStyle = INK;
+  ctx.font = `900 30px ${sansStack}`;
+  ctx.fillText("Your Ratings & Impressions", x0, y + 34);
+  y += 58;
+
+  // Wine cards (2 columns)
+  const colGap = 18;
+  const colW = Math.floor((maxW - colGap) / 2);
+  const rowH = 206;
+
+  const maxCards = 6; // keep export clean and non-cluttered
+  const list = wines.slice(0, maxCards);
+
+  for (let i = 0; i < list.length; i++) {
+    const w = list[i];
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+
+    const wx = x0 + col * (colW + colGap);
+    const wy = y + row * (rowH + 16);
+
+    drawShadowCard(ctx, wx, wy, colW, rowH, 32, "#FFFFFF", {
+      color: "rgba(0,0,0,0.14)",
+      blur: 24,
+      y: 10,
+    });
+
+    // Wine name
+    ctx.fillStyle = INK;
+    ctx.font = `900 30px ${sansStack}`;
+    wrapText(ctx, w.name, wx + 24, wy + 52, colW - 48, 36);
+
+    // Varietal
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 24px ${sansStack}`;
+    ctx.fillText(w.varietal || "Varietal", wx + 24, wy + 86);
+
+    // Rating dots
+    drawRatingDots(ctx, w.rating, wx + 24, wy + 104, {
+      dot: 9,
+      gap: 14,
+      stroke: "rgba(0,0,0,0.22)",
+      fill: ACCENT,
+      empty: "rgba(0,0,0,0.10)",
+    });
+
+    // Tags as small chips
+    const tags = (w.tags ?? []).slice(0, 3);
+    let tx = wx + 24;
+    const ty = wy + 142;
+    for (const t of tags) {
+      const label = TAG_LABELS[t];
+      const chip = drawChip(ctx, label, tx, ty, {
+        padX: 14,
+        padY: 2,
+        r: 999,
+        bg: "#FAFAF9",
+        border: "rgba(0,0,0,0.10)",
+        color: INK,
+        font: `800 22px ${sansStack}`,
+      });
+      tx += chip.w + 10;
+      if (tx > wx + colW - 24) break;
+    }
+
+    if (tags.length === 0) {
+      ctx.fillStyle = MUTED;
+      ctx.font = `600 22px ${sansStack}`;
+      ctx.fillText("No tags selected", wx + 24, wy + 168);
+    }
+  }
+
+  // move y past the grid
+  const rows = Math.ceil(list.length / 2);
+  y += rows * (rowH + 16) + 18;
+
+  // --- Suggestions card ---
   const labelToTag: Record<string, TagId> = {
     Fruity: "FRUITY",
     Floral: "FLORAL",
@@ -219,47 +428,53 @@ export function downloadProfileCardPng(args: {
     .filter(Boolean)
     .slice(0, 2);
 
-  // Section box
-  const sY = Math.max(y + 20, 1420);
   const sH = 320;
+  drawShadowCard(ctx, x0, y, maxW, sH, 36, "#FFFFFF", {
+    color: "rgba(0,0,0,0.14)",
+    blur: 26,
+    y: 10,
+  });
 
-  ctx.fillStyle = "#FFFFFF";
-  ctx.strokeStyle = "#E5E7EB";
-  ctx.lineWidth = 3;
-  roundedRect(ctx, pad, sY, W - pad * 2, sH, 28);
-  ctx.fill();
-  ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.font = `950 30px ${sansStack}`;
+  ctx.fillText("Next time you might enjoy", x0 + 28, y + 58);
 
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 44px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText("Next time you might enjoy", pad + 32, sY + 70);
+  let sy = y + 94;
 
-  let syText = sY + 120;
+  if (inferredTags.length === 0) {
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 28px ${sansStack}`;
+    wrapText(
+      ctx,
+      "Rate wines and pick tags to unlock a better recommendation.",
+      x0 + 28,
+      sy + 10,
+      maxW - 56,
+      38
+    );
+  } else {
+    for (const t of inferredTags) {
+      ctx.fillStyle = ACCENT;
+      ctx.font = `950 28px ${sansStack}`;
+      ctx.fillText(TAG_LABELS[t], x0 + 28, sy + 30);
 
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 36px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+      ctx.fillStyle = MUTED;
+      ctx.font = `600 28px ${sansStack}`;
+      sy = wrapText(ctx, tagToSuggestion(t), x0 + 28, sy + 66, maxW - 56, 38) + 24;
 
-  ctx.fillStyle = "#111827";
-  ctx.font = "700 36px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillStyle = "#111827";
+      if (sy > y + sH - 44) break;
 
-  for (const t of inferredTags) {
-    const label = TAG_LABELS[t];
-    ctx.fillStyle = "#111827";
-    ctx.font = "700 36px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-    ctx.fillText(label, pad + 32, syText);
-
-    ctx.fillStyle = "#6B7280";
-    ctx.font = "500 32px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-    syText = wrapText(ctx, tagToSuggestion(t), pad + 32, syText + 44, W - pad * 2 - 64, 40) + 54;
-
-    if (syText > sY + sH - 40) break;
+      // divider between suggestions
+      ctx.fillStyle = "rgba(0,0,0,0.08)";
+      ctx.fillRect(x0 + 28, sy + 6, maxW - 56, 2);
+      sy += 18;
+    }
   }
 
   // Footer
-  ctx.fillStyle = "#9CA3AF";
-  ctx.font = "500 28px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
-  ctx.fillText("Save this for your next visit.", pad, 1860);
+  ctx.fillStyle = "rgba(255,255,255,0.65)";
+  ctx.font = `600 26px ${sansStack}`;
+  ctx.fillText("Saved from your tasting session", cardX + 70, cardY + cardH + 70);
 
   // Export
   const dataUrl = canvas.toDataURL("image/png");

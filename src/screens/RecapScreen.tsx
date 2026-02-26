@@ -1,8 +1,9 @@
 // src/screens/RecapScreen.tsx
 
-import type { TagId, WineResponse } from "../app/state/session";
+import type { Session, TagId, WineResponse } from "../app/state/session";
 import { downloadProfileCardPng } from "../utils/profileCard";
 import { BRAND } from "../styles/brand";
+import { FLIGHTS } from "../data/flights";
 
 type Wine = {
   id: string;
@@ -11,9 +12,9 @@ type Wine = {
 };
 
 type Props = {
-  wines: Wine[];
-  responsesByWineId: Record<string, WineResponse>;
+  session: Session;
   onRestart: () => void;
+  onBack: () => void;
 };
 
 const TAG_LABELS: Record<TagId, string> = {
@@ -27,7 +28,7 @@ const TAG_LABELS: Record<TagId, string> = {
   BOLD: "Bold",
 };
 
-function calculateTagCounts(responses: Record<string, WineResponse>) {
+function calculateTagCounts(responses?: Record<string, WineResponse>) {
   const counts: Record<TagId, number> = {
     FRUITY: 0,
     FLORAL: 0,
@@ -39,8 +40,8 @@ function calculateTagCounts(responses: Record<string, WineResponse>) {
     BOLD: 0,
   };
 
-  Object.values(responses).forEach((r) => {
-    r.tags.forEach((t) => {
+  Object.values(responses ?? {}).forEach((r) => {
+    (r?.tags ?? []).forEach((t) => {
       counts[t] += 1;
     });
   });
@@ -79,7 +80,24 @@ function tagToSuggestion(tag: TagId): string {
   }
 }
 
-export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
+function buildWinesForFlight(flightId: string | null): Wine[] {
+  const flight = FLIGHTS.find((f) => f.id === flightId);
+  const count = flight?.wineCount ?? 0;
+
+  return Array.from({ length: count }).map((_, i) => {
+    const n = i + 1;
+    return {
+      id: `${flightId}-wine-${n}`,
+      name: `Wine ${n}`,
+      varietal: "Varietal",
+    };
+  });
+}
+
+export function RecapScreen({ session, onRestart, onBack }: Props) {
+  const responsesByWineId = session?.responsesByWineId ?? {};
+  const wines = buildWinesForFlight(session.flightId);
+
   const counts = calculateTagCounts(responsesByWineId);
   const top2 = topTagsFromCounts(counts, 2);
 
@@ -93,7 +111,7 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
         name: w.name,
         varietal: w.varietal,
         rating: resp.rating,
-        tags: resp.tags,
+        tags: resp.tags ?? [],
       };
     });
 
@@ -127,6 +145,37 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
 
   return (
     <div style={{ color: BRAND.colors.textPrimary }}>
+      {/* Top row */}
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+        <button
+          onClick={onBack}
+          style={{
+            border: `1px solid ${BRAND.colors.border}`,
+            background: BRAND.colors.surface,
+            borderRadius: 999,
+            padding: "10px 14px",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          ← Back
+        </button>
+
+        <button
+          onClick={onRestart}
+          style={{
+            border: `1px solid ${BRAND.colors.border}`,
+            background: BRAND.colors.surface,
+            borderRadius: 999,
+            padding: "10px 14px",
+            cursor: "pointer",
+            fontWeight: 900,
+          }}
+        >
+          Start Over
+        </button>
+      </div>
+
       {/* Accent Bar */}
       <div
         style={{
@@ -137,7 +186,7 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
         }}
       />
 
-      {/* “Signature” Header */}
+      {/* Header */}
       <div style={{ marginBottom: 18 }}>
         <div
           style={{
@@ -152,21 +201,9 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
           Your Tasting Profile
         </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            height: 1,
-            background: BRAND.colors.border,
-          }}
-        />
+        <div style={{ marginTop: 10, height: 1, background: BRAND.colors.border }} />
 
-        <div
-          style={{
-            marginTop: 10,
-            color: BRAND.colors.textSecondary,
-            fontSize: 14,
-          }}
-        >
+        <div style={{ marginTop: 10, color: BRAND.colors.textSecondary, fontSize: 14 }}>
           A quick snapshot of what you enjoyed today, plus a direction for next time.
         </div>
       </div>
@@ -235,18 +272,12 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
             gridTemplateColumns: "1fr",
           }}
         >
-          {wines.map((wine) => {
+          {(wines ?? []).map((wine) => {
             const response = responsesByWineId[wine.id];
             if (!response) return null;
 
             return (
-              <div
-                key={wine.id}
-                style={{
-                  ...cardStyle,
-                  padding: 14,
-                }}
-              >
+              <div key={wine.id} style={{ ...cardStyle, padding: 14 }}>
                 <div style={{ fontWeight: 950, fontSize: 15 }}>{wine.name}</div>
                 <div style={{ fontSize: 13, color: BRAND.colors.textSecondary, marginTop: 2 }}>
                   {wine.varietal}
@@ -258,8 +289,8 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
                 </div>
 
                 <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {response.tags.length > 0 ? (
-                    response.tags.map((t) => (
+                  {(response.tags ?? []).length > 0 ? (
+                    (response.tags ?? []).map((t) => (
                       <span key={t} style={chipStyle}>
                         {TAG_LABELS[t]}
                       </span>
@@ -309,24 +340,8 @@ export function RecapScreen({ wines, responsesByWineId, onRestart }: Props) {
           </div>
         )}
       </div>
-
-      {/* Secondary action */}
-      <button
-        onClick={onRestart}
-        style={{
-          width: "100%",
-          padding: "14px 16px",
-          borderRadius: 999,
-          border: "1px solid #D6D3D1",
-          background: "#FFFFFF",
-          color: BRAND.colors.textPrimary,
-          fontWeight: 900,
-          cursor: "pointer",
-          boxShadow: "0 6px 20px rgba(0,0,0,0.06)",
-        }}
-      >
-        Start Over
-      </button>
     </div>
   );
 }
+
+export default RecapScreen;

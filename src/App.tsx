@@ -114,7 +114,6 @@ export default function App() {
         [wineId]: next,
       },
       // keep currentWineId in session so refresh stays on same wine
-      ...(prev as any),
       currentWineId: wineId,
     } as any));
   };
