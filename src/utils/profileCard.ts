@@ -216,7 +216,6 @@ export function downloadProfileCardPng(args: {
   const CREAM = "#F5F2EC";
   const INK = "#141820";
   const MUTED = "rgba(20,24,32,0.70)";
-  const BORDER_SOFT = "rgba(0,0,0,0.10)";
   const ACCENT = "#7B1E3A";
   const ACCENT_SOFT = "rgba(123,30,58,0.12)";
 
