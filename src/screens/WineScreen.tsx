@@ -47,14 +47,24 @@ export default function WineScreen({
   const hasRating = rating !== null;
   const tagLimitReached = selectedTags.length >= 3;
 
+  // Responsive sizing for rating buttons so 5 never clip on small phones
+  const ratingButtonSize = "clamp(38px, 10vw, 44px)";
+  const ratingGap = "clamp(8px, 2.5vw, 12px)";
+
   return (
     <div
       style={{
         width: "100%",
         maxWidth: 760,
         margin: "0 auto",
-        padding: "clamp(18px, 3.2vw, 32px)",
+
+        // smaller min padding so cards don't get squeezed on tiny screens
+        padding: "clamp(8px, 2.2vw, 28px)",
         boxSizing: "border-box",
+
+        // prevents random horizontal scroll caused by any child overflow
+        minWidth: 0,
+        overflowX: "hidden",
       }}
     >
       {/* Header */}
@@ -76,6 +86,7 @@ export default function WineScreen({
             padding: "8px 12px",
             cursor: "pointer",
             fontWeight: 700,
+            flex: "0 0 auto",
           }}
         >
           ← Back
@@ -87,6 +98,8 @@ export default function WineScreen({
             textTransform: "uppercase",
             fontSize: 12,
             color: BRAND.colors.textSecondary,
+            textAlign: "right",
+            minWidth: 0,
           }}
         >
           {progressLabel}
@@ -132,13 +145,13 @@ export default function WineScreen({
               textTransform: "uppercase",
               fontSize: 11,
               color: BRAND.colors.textPrimary,
+              flex: "0 0 auto",
             }}
           >
             {wine.varietal}
           </span>
-          <span style={{ fontSize: 13 }}>
-            Quick impression first, details later.
-          </span>
+
+          <span style={{ fontSize: 13 }}>Quick impression first, details later.</span>
         </div>
 
         <div
@@ -161,7 +174,9 @@ export default function WineScreen({
           borderRadius: BRAND.radii.card,
           border: `1px solid ${BRAND.colors.borderSoft}`,
           boxShadow: "0 14px 40px rgba(0,0,0,0.10)",
-          padding: 18,
+
+          // yes: keep this clamp (and same on rating card)
+          padding: "clamp(12px, 3vw, 18px)",
           marginBottom: 18,
         }}
       >
@@ -179,23 +194,17 @@ export default function WineScreen({
             What stands out?
           </div>
 
-          <div
-            style={{
-              fontSize: 12,
-              color: BRAND.colors.textSecondary,
-            }}
-          >
+          <div style={{ fontSize: 12, color: BRAND.colors.textSecondary, whiteSpace: "nowrap" }}>
             Pick up to <b>3</b>
           </div>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(128px, 1fr))",
-            gap: 10,
-          }}
-        >
+        {/* Tags grid:
+            - 2 columns on small screens
+            - 3 columns on medium
+            - 4 columns on wide
+        */}
+        <div className="wine-tags-grid">
           {TAGS.map((t) => {
             const isSelected = selectedTags.includes(t.id);
             const isDisabled = !isSelected && tagLimitReached;
@@ -206,49 +215,68 @@ export default function WineScreen({
                 onClick={() => onToggleTag(t.id)}
                 disabled={isDisabled}
                 style={{
-                  padding: "10px 12px",
+                  width: "100%",
+                  minWidth: 0,
+
+                  // slightly tighter to reduce wrap/scroll pressure on small phones
+                  padding: "8px 8px",
                   borderRadius: BRAND.radii.pill,
                   border: isSelected
                     ? `1px solid ${BRAND.colors.accent}`
                     : `1px solid ${BRAND.colors.borderSoft}`,
                   background: isSelected ? BRAND.colors.accentSoft : "rgba(0,0,0,0.02)",
                   color: BRAND.colors.textPrimary,
-                  fontSize: 14,
+
+                  fontSize: 13,
                   fontWeight: 700,
+
                   cursor: isDisabled ? "not-allowed" : "pointer",
                   opacity: isDisabled ? 0.45 : 1,
+
+                  // NOTE: removed the little circle to save width
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 10,
+                  justifyContent: "center",
                 }}
               >
-                <span>{t.label}</span>
                 <span
-                  aria-hidden="true"
                   style={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: 999,
-                    border: isSelected
-                      ? `2px solid ${BRAND.colors.accent}`
-                      : `2px solid rgba(0,0,0,0.22)`,
-                    background: isSelected ? BRAND.colors.accent : "transparent",
-                    flex: "0 0 auto",
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
-                />
+                >
+                  {t.label}
+                </span>
               </button>
             );
           })}
         </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            fontSize: 12,
-            color: BRAND.colors.textSecondary,
-          }}
-        >
+        <style>
+          {`
+            .wine-tags-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 10px;
+            }
+
+            @media (min-width: 520px) {
+              .wine-tags-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+              }
+            }
+
+            @media (min-width: 700px) {
+              .wine-tags-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+              }
+            }
+          `}
+        </style>
+
+        <div style={{ marginTop: 10, fontSize: 12, color: BRAND.colors.textSecondary }}>
           Tip: go with your gut. “Fruity + Crisp + Smooth” is totally valid.
         </div>
       </div>
@@ -260,7 +288,9 @@ export default function WineScreen({
           borderRadius: BRAND.radii.card,
           border: `1px solid ${BRAND.colors.borderSoft}`,
           boxShadow: "0 14px 40px rgba(0,0,0,0.10)",
-          padding: 18,
+
+          // yes: keep same clamp as tags card
+          padding: "clamp(12px, 3vw, 18px)",
           marginBottom: 18,
         }}
       >
@@ -285,8 +315,8 @@ export default function WineScreen({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(5, 1fr)",
-            gap: 12,
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: ratingGap,
             alignItems: "center",
             width: "100%",
             justifyItems: "center",
@@ -301,8 +331,8 @@ export default function WineScreen({
                 onClick={() => onSetRating(n as 1 | 2 | 3 | 4 | 5)}
                 aria-label={`Rate ${n} out of 5`}
                 style={{
-                  width: 44,
-                  height: 44,
+                  width: ratingButtonSize,
+                  height: ratingButtonSize,
                   borderRadius: 999,
                   border: selected
                     ? `2px solid ${BRAND.colors.accent}`
@@ -353,14 +383,7 @@ export default function WineScreen({
         Next →
       </button>
 
-      <div
-        style={{
-          marginTop: 10,
-          fontSize: 12,
-          color: BRAND.colors.textSecondary,
-          textAlign: "center",
-        }}
-      >
+      <div style={{ marginTop: 10, fontSize: 12, color: BRAND.colors.textSecondary, textAlign: "center" }}>
         You can always tweak tags later in the recap.
       </div>
     </div>

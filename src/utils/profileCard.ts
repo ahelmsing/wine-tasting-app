@@ -140,7 +140,7 @@ function drawChip(
   ctx.font = opts.font;
   const textW = ctx.measureText(text).width;
   const w = Math.ceil(textW + opts.padX * 2);
-  const h = Math.ceil(34 + opts.padY * 2); // tuned for 28–30px font sizes
+  const h = Math.ceil(34 + opts.padY * 2);
 
   ctx.fillStyle = opts.bg;
   ctx.strokeStyle = opts.border;
@@ -184,11 +184,342 @@ function drawRatingDots(
   ctx.restore();
 }
 
+/**
+ * Safer style applier than casting object literals to CSSStyleDeclaration.
+ * Works with TS + allows us to set CSS vars / vendor props via setProperty when needed.
+ */
+function applyStyles(el: HTMLElement, styles: Record<string, string>) {
+  for (const [k, v] of Object.entries(styles)) {
+    if (k.startsWith("--") || k.includes("-")) {
+      el.style.setProperty(k, v);
+      continue;
+    }
+    (el.style as unknown as Record<string, string>)[k] = v;
+  }
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, base64] = dataUrl.split(",");
+  const mimeMatch = meta.match(/data:(.*?);base64/);
+  const mime = mimeMatch?.[1] ?? "image/png";
+
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+
+  return new Blob([bytes], { type: mime });
+}
+
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 250);
+}
+
+type ShareCapableNavigator = Navigator & {
+  canShare?: (data: { files: File[] }) => boolean;
+  share?: (data: { files: File[]; title?: string; text?: string }) => Promise<void>;
+};
+
+type ShareAttempt = "shared" | "cancelled" | "unsupported" | "failed";
+
+function canNativeShareFiles(file: File): boolean {
+  const nav = navigator as ShareCapableNavigator;
+
+  // Web Share requires secure context in practice.
+  if (!globalThis.isSecureContext) return false;
+  if (typeof nav.share !== "function") return false;
+  if (typeof File === "undefined") return false;
+
+  if (typeof nav.canShare === "function") {
+    try {
+      return nav.canShare({ files: [file] });
+    } catch {
+      return false;
+    }
+  }
+
+  // If canShare isn't available, we *might* still be able to share.
+  return true;
+}
+
+async function tryNativeShareFile(args: {
+  file: File;
+  title?: string;
+  text?: string;
+}): Promise<ShareAttempt> {
+  const nav = navigator as ShareCapableNavigator;
+
+  if (typeof nav.share !== "function") return "unsupported";
+
+  try {
+    await nav.share({
+      files: [args.file],
+      title: args.title,
+      text: args.text,
+    });
+    return "shared";
+  } catch (e: unknown) {
+    const err = e as { name?: string; message?: string };
+
+    // User hit "cancel" / dismissed share sheet.
+    if (err?.name === "AbortError") return "cancelled";
+
+    // Some browsers throw TypeError for unsupported share payloads.
+    if (err?.name === "TypeError") return "unsupported";
+
+    return "failed";
+  }
+}
+
+function openPreviewModal(opts: { dataUrl: string; filename: string }) {
+  const existing = document.getElementById("profile-card-preview-overlay");
+  if (existing) existing.remove();
+
+  const previousOverflow = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+
+  const overlay = document.createElement("div");
+  overlay.id = "profile-card-preview-overlay";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+
+  applyStyles(overlay, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "9999",
+    background: "rgba(0,0,0,0.78)",
+    display: "grid",
+    placeItems: "center",
+    padding: "18px",
+    boxSizing: "border-box",
+  });
+
+  const panel = document.createElement("div");
+  applyStyles(panel, {
+    width: "min(520px, 100%)",
+    maxHeight: "90vh",
+    borderRadius: "18px",
+    background: "#0b0b0c",
+    border: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: "0 28px 90px rgba(0,0,0,0.55)",
+    overflow: "hidden",
+    display: "grid",
+    gridTemplateRows: "auto 1fr auto",
+  });
+
+  const header = document.createElement("div");
+  applyStyles(header, {
+    padding: "14px 14px 10px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "10px",
+    color: "rgba(255,255,255,0.92)",
+    fontFamily:
+      'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial',
+  });
+
+  const leftHeader = document.createElement("div");
+  applyStyles(leftHeader, { display: "grid", gap: "4px" });
+
+  const title = document.createElement("div");
+  title.textContent = "Preview";
+  applyStyles(title, {
+    fontWeight: "800",
+    letterSpacing: "0.02em",
+    fontSize: "14px",
+  });
+
+  const hint = document.createElement("div");
+  hint.textContent = "Share or download your card.";
+  applyStyles(hint, {
+    fontSize: "12px",
+    color: "rgba(255,255,255,0.65)",
+  });
+
+  leftHeader.appendChild(title);
+  leftHeader.appendChild(hint);
+
+  const headerActions = document.createElement("div");
+  applyStyles(headerActions, {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  });
+
+  const closeIconBtn = document.createElement("button");
+  closeIconBtn.type = "button";
+  closeIconBtn.setAttribute("aria-label", "Close");
+  closeIconBtn.textContent = "✕";
+  applyStyles(closeIconBtn, {
+    appearance: "none",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "transparent",
+    color: "rgba(255,255,255,0.85)",
+    borderRadius: "999px",
+    width: "34px",
+    height: "34px",
+    display: "grid",
+    placeItems: "center",
+    cursor: "pointer",
+    fontWeight: "800",
+    lineHeight: "1",
+  });
+
+  headerActions.appendChild(closeIconBtn);
+
+  header.appendChild(leftHeader);
+  header.appendChild(headerActions);
+
+  const imgWrap = document.createElement("div");
+  applyStyles(imgWrap, {
+    padding: "12px 14px",
+    overflow: "auto",
+    background:
+      "radial-gradient(900px 500px at 50% 10%, rgba(255,255,255,0.06), transparent 60%)",
+  });
+  imgWrap.style.setProperty("-webkit-overflow-scrolling", "touch");
+
+  const img = document.createElement("img");
+  img.src = opts.dataUrl;
+  img.alt = "Tasting profile card preview";
+  applyStyles(img, {
+    width: "100%",
+    height: "auto",
+    borderRadius: "14px",
+    display: "block",
+    boxShadow: "0 16px 50px rgba(0,0,0,0.45)",
+  });
+  imgWrap.appendChild(img);
+
+  const footer = document.createElement("div");
+  applyStyles(footer, {
+    padding: "12px 14px 14px",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "10px",
+    background: "rgba(255,255,255,0.04)",
+    borderTop: "1px solid rgba(255,255,255,0.10)",
+  });
+
+  // Build the blob + file once so share/download use the same payload.
+  const blob = dataUrlToBlob(opts.dataUrl);
+  const file = new File([blob], opts.filename, { type: blob.type || "image/png" });
+
+  const shareIsAvailable = canNativeShareFiles(file);
+
+  const shareBtn = document.createElement("button");
+  shareBtn.type = "button";
+  shareBtn.textContent = "Share";
+  applyStyles(shareBtn, {
+    appearance: "none",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.16)",
+    color: "rgba(255,255,255,0.95)",
+    borderRadius: "999px",
+    padding: "12px 14px",
+    fontWeight: "900",
+    cursor: "pointer",
+    fontFamily:
+      'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial',
+  });
+
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.textContent = "Download PNG";
+  applyStyles(downloadBtn, {
+    appearance: "none",
+    border: "1px solid rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.12)",
+    color: "rgba(255,255,255,0.95)",
+    borderRadius: "999px",
+    padding: "12px 14px",
+    fontWeight: "800",
+    cursor: "pointer",
+    fontFamily:
+      'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial',
+  });
+
+  const cleanup = () => {
+    overlay.remove();
+    document.body.style.overflow = previousOverflow;
+    window.removeEventListener("keydown", onKeyDown);
+  };
+
+  const triggerDownload = () => {
+    triggerBlobDownload(blob, opts.filename);
+  };
+
+  const triggerShare = async () => {
+    // If it isn't truly available, don't pretend. Just download.
+    if (!shareIsAvailable) {
+      triggerDownload();
+      return;
+    }
+
+    const result = await tryNativeShareFile({
+      file,
+      title: "Tasting profile",
+      text: "Here’s my tasting profile card.",
+    });
+
+    if (result === "shared") {
+      cleanup();
+      return;
+    }
+
+    // If the user cancelled, do nothing (NO surprise download).
+    if (result === "cancelled") return;
+
+    // Unsupported/failed: fall back to download.
+    triggerDownload();
+  };
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") cleanup();
+  };
+
+  downloadBtn.addEventListener("click", () => triggerDownload());
+  closeIconBtn.addEventListener("click", () => cleanup());
+  shareBtn.addEventListener("click", () => void triggerShare());
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) cleanup();
+  });
+  window.addEventListener("keydown", onKeyDown);
+
+  // If Share isn't real on this browser/context, hide it and make Download full width.
+  if (!shareIsAvailable) {
+    applyStyles(footer, { gridTemplateColumns: "1fr" });
+    footer.appendChild(downloadBtn);
+  } else {
+    footer.appendChild(shareBtn);
+    footer.appendChild(downloadBtn);
+  }
+
+  panel.appendChild(header);
+  panel.appendChild(imgWrap);
+  panel.appendChild(footer);
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+}
+
 export function downloadProfileCardPng(args: {
   wineryName?: string;
   title?: string;
   personality: string;
-  topTags: string[]; // e.g. ["Fruity", "Crisp"]
+  topTags: string[];
   wines: WineSummary[];
 }) {
   const {
@@ -199,7 +530,6 @@ export function downloadProfileCardPng(args: {
     wines,
   } = args;
 
-  // Portrait, phone-friendly
   const W = 1080;
   const H = 1920;
 
@@ -210,7 +540,6 @@ export function downloadProfileCardPng(args: {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  // --- Palette (matches your app vibe) ---
   const PLUM_1 = "#2A0F1D";
   const PLUM_2 = "#150813";
   const CREAM = "#F5F2EC";
@@ -219,23 +548,27 @@ export function downloadProfileCardPng(args: {
   const ACCENT = "#7B1E3A";
   const ACCENT_SOFT = "rgba(123,30,58,0.12)";
 
-  // --- Background: dramatic plum gradient + subtle vignette ---
   const bg = ctx.createLinearGradient(0, 0, 0, H);
   bg.addColorStop(0, PLUM_1);
   bg.addColorStop(1, PLUM_2);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  // vignette
   ctx.save();
-  const vignette = ctx.createRadialGradient(W * 0.5, H * 0.35, 80, W * 0.5, H * 0.5, H * 0.9);
+  const vignette = ctx.createRadialGradient(
+    W * 0.5,
+    H * 0.35,
+    80,
+    W * 0.5,
+    H * 0.5,
+    H * 0.9
+  );
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(1, "rgba(0,0,0,0.35)");
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
   ctx.restore();
 
-  // --- Outer “paper” card ---
   const outerPad = 64;
   const cardX = outerPad;
   const cardY = 84;
@@ -248,53 +581,46 @@ export function downloadProfileCardPng(args: {
     y: 22,
   });
 
-  // inner padding for content
   const pad = 72;
   const x0 = cardX + pad;
   let y = cardY + 76;
   const maxW = cardW - pad * 2;
 
-  // Accent bar
   ctx.fillStyle = ACCENT;
   roundedRect(ctx, x0, y - 28, maxW, 10, 999);
   ctx.fill();
 
-  // Fonts: we use reliable stacks (canvas can’t guarantee your exact serif)
   const serifStack =
     '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
   const sansStack =
     'ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial';
 
-  // Winery name (small, modern)
   ctx.fillStyle = INK;
   ctx.font = `700 36px ${sansStack}`;
   ctx.textBaseline = "alphabetic";
   ctx.fillText(wineryName, x0, y + 26);
 
-  // Title (dramatic)
   y += 92;
   ctx.fillStyle = INK;
   ctx.font = `700 72px ${serifStack}`;
   y = wrapText(ctx, title, x0, y, maxW, 78) + 22;
 
-  // Divider
   ctx.fillStyle = "rgba(0,0,0,0.12)";
   ctx.fillRect(x0, y, maxW, 2);
   y += 26;
 
-  // Subtitle
   ctx.fillStyle = MUTED;
   ctx.font = `500 30px ${sansStack}`;
-  y = wrapText(
-    ctx,
-    "A quick snapshot of what you enjoyed today, plus a direction for next time.",
-    x0,
-    y + 8,
-    maxW,
-    40
-  ) + 40;
+  y =
+    wrapText(
+      ctx,
+      "A quick snapshot of what you enjoyed today, plus a direction for next time.",
+      x0,
+      y + 8,
+      maxW,
+      40
+    ) + 40;
 
-  // --- Personality card ---
   const pH = 190;
   drawShadowCard(ctx, x0, y, maxW, pH, 36, "rgba(255,255,255,0.72)", {
     color: "rgba(0,0,0,0.14)",
@@ -310,7 +636,6 @@ export function downloadProfileCardPng(args: {
   ctx.font = `900 46px ${sansStack}`;
   wrapText(ctx, personality, x0 + 32, y + 112, maxW - 64, 54);
 
-  // Top tag chips
   const chipsY = y + 132;
   let cx = x0 + 32;
   const chipFont = `800 26px ${sansStack}`;
@@ -333,18 +658,16 @@ export function downloadProfileCardPng(args: {
 
   y += pH + 28;
 
-  // --- Section header: Wines ---
   ctx.fillStyle = INK;
   ctx.font = `900 30px ${sansStack}`;
   ctx.fillText("Your Ratings & Impressions", x0, y + 34);
   y += 58;
 
-  // Wine cards (2 columns)
   const colGap = 18;
   const colW = Math.floor((maxW - colGap) / 2);
   const rowH = 206;
 
-  const maxCards = 6; // keep export clean and non-cluttered
+  const maxCards = 6;
   const list = wines.slice(0, maxCards);
 
   for (let i = 0; i < list.length; i++) {
@@ -361,17 +684,14 @@ export function downloadProfileCardPng(args: {
       y: 10,
     });
 
-    // Wine name
     ctx.fillStyle = INK;
     ctx.font = `900 30px ${sansStack}`;
     wrapText(ctx, w.name, wx + 24, wy + 52, colW - 48, 36);
 
-    // Varietal
     ctx.fillStyle = MUTED;
     ctx.font = `600 24px ${sansStack}`;
     ctx.fillText(w.varietal || "Varietal", wx + 24, wy + 86);
 
-    // Rating dots
     drawRatingDots(ctx, w.rating, wx + 24, wy + 104, {
       dot: 9,
       gap: 14,
@@ -380,7 +700,6 @@ export function downloadProfileCardPng(args: {
       empty: "rgba(0,0,0,0.10)",
     });
 
-    // Tags as small chips
     const tags = (w.tags ?? []).slice(0, 3);
     let tx = wx + 24;
     const ty = wy + 142;
@@ -406,11 +725,9 @@ export function downloadProfileCardPng(args: {
     }
   }
 
-  // move y past the grid
   const rows = Math.ceil(list.length / 2);
   y += rows * (rowH + 16) + 18;
 
-  // --- Suggestions card ---
   const labelToTag: Record<string, TagId> = {
     Fruity: "FRUITY",
     Floral: "FLORAL",
@@ -459,28 +776,28 @@ export function downloadProfileCardPng(args: {
 
       ctx.fillStyle = MUTED;
       ctx.font = `600 28px ${sansStack}`;
-      sy = wrapText(ctx, tagToSuggestion(t), x0 + 28, sy + 66, maxW - 56, 38) + 24;
+      sy =
+        wrapText(ctx, tagToSuggestion(t), x0 + 28, sy + 66, maxW - 56, 38) + 24;
 
       if (sy > y + sH - 44) break;
 
-      // divider between suggestions
       ctx.fillStyle = "rgba(0,0,0,0.08)";
       ctx.fillRect(x0 + 28, sy + 6, maxW - 56, 2);
       sy += 18;
     }
   }
 
-  // Footer
   ctx.fillStyle = "rgba(255,255,255,0.65)";
   ctx.font = `600 26px ${sansStack}`;
-  ctx.fillText("Saved from your tasting session", cardX + 70, cardY + cardH + 70);
+  ctx.fillText(
+    "Saved from your tasting session",
+    cardX + 70,
+    cardY + cardH + 70
+  );
 
-  // Export
   const dataUrl = canvas.toDataURL("image/png");
-  const link = document.createElement("a");
-  link.href = dataUrl;
+  const filename =
+    (safeFilename(`${wineryName}-${personality}`) || "tasting-profile") + ".png";
 
-  const filename = safeFilename(`${wineryName}-${personality}`) || "tasting-profile";
-  link.download = `${filename}.png`;
-  link.click();
+  openPreviewModal({ dataUrl, filename });
 }
